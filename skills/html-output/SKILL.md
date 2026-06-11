@@ -41,7 +41,7 @@ is the whole reason to build a UI instead of a static doc.
 <!-- body: class="bg-slate-50 text-slate-800"; wrap content in: max-w-6xl mx-auto px-6 (max-w-[1440px] if dense) -->
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{fontFamily:'Inter,sans-serif',primaryColor:'#eef2ff',primaryBorderColor:'#6366f1',lineColor:'#94a3b8',clusterBkg:'#fff',clusterBorder:'#e2e8f0'},flowchart:{useMaxWidth:true,curve:'basis'}});
+  mermaid.initialize({startOnLoad:true,theme:'neutral',securityLevel:'loose',themeVariables:{fontFamily:'Inter,sans-serif'},flowchart:{useMaxWidth:true,curve:'basis'}});
 </script>
 ```
 
@@ -56,7 +56,12 @@ gap-4`); for "what × where" a matrix table (✓/—/value cells, `colspan` grou
 node both read and written (split the hub; a backward arrow means a missing node); label every node
 with its **type** and every arrow with an **action**; group nodes in a `subgraph` per boundary, and
 split into one diagram **per scope** rather than one crowded one. (Quote labels with special chars;
-`<br/>` ok; thick labelled edge = `A ==>|text| B`.)
+use `<br>` for line breaks — never `<br/>`; thick labelled edge = `A ==>|text| B`.) Mermaid's
+lexer tokenises globally before string context is established — never use `[`, `]`, or `@` inside
+label *text* (node labels, subgraph titles, edge labels): they are grammar tokens that cause parse
+errors regardless of quoting. Strip or reword rather than escape — there is no reliable escape.
+For Mermaid init, prefer `theme: "neutral", securityLevel: "loose"` — `"loose"` enables HTML
+labels (`<br>`) and avoids sanitiser-induced parse failures.
 
 **Deliver:** write to the OS temp dir so nothing lands in the repo — resolve from `$TMPDIR`, falling
 back to `/tmp` (or `%TEMP%` on Windows), to `<tmpdir>/<slug>-<timestamp>.html` (fresh each run).
