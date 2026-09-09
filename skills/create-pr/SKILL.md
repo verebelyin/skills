@@ -88,8 +88,8 @@ gh pr create --base "$BASE" --title "$TITLE" --body-file "$PR_BODY"
     -H 'X-GitHub-Api-Version: 2026-03-10' \
     "repos/$OWNER/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
     --input - > /tmp/copilot-review-request.txt 2>&1 <<'JSON'
-{"reviewers":["copilot-pull-request-reviewer[bot]"],"team_reviewers":[]}
-JSON
+  {"reviewers":["copilot-pull-request-reviewer[bot]"],"team_reviewers":[]}
+  JSON
   cat /tmp/copilot-review-request.txt
   ```
 - The intended review effort for this skill is **Lite**. Configure the repository or organization default to `Lite` in GitHub Copilot code-review settings before running this workflow. The reviewer API cannot select `Lite`; never add undocumented `model`, `review_effort`, or prompt fields to the request.
