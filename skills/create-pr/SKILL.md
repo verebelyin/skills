@@ -56,7 +56,7 @@ EOF
 
 Then verify: `git log -1 --format=%B | sed -n l` — confirm no literal `\n` reached the message.
 
-**Never include** any reference to an AI assistant, LLM, model name, "generated with", or `Co-Authored-By` for a bot in the git commit message, branch name, PR title, or normal PR prose. The single permitted exception is the final Model information line specified below.
+**Never include** any reference to an AI assistant, LLM, model name, "generated with", or `Co-Authored-By` for a bot in the git commit message, branch name, PR title, or normal PR prose. The single permitted exception is the final model slug specified below.
 
 ### 4. Push and open the PR
 
@@ -74,16 +74,7 @@ gh pr create --base "$BASE" --title "$TITLE" --body-file "$PR_BODY"
   - **Background** — optional; include it only when an issue, ticket, or trigger adds useful context.
 - Before creating the PR, inspect the body file and confirm it contains no stale text or duplicated top-level sections.
 - **Do not add a validation/testing-steps section.**
-- **Model information** — make the final line of the PR body exactly one model-information line, after all sections. Before the review runs, use `effort=unverified`; replace it with `effort=Lite (verified)` only after the Copilot overview confirms Lite:
-  ```text
-  Model information: model=GitHub-managed; reviewer=GitHub Copilot Code Review; effort=unverified
-  ```
-  Use the actual model slug only when this workflow knows it. Copilot Code Review does not expose its exact model through the reviewer API, so use `model=GitHub-managed` for that path. This line is allowed in the PR body only. Keep model information out of the PR title, branch name, and every git commit message.
-
-  After Lite is confirmed, rewrite the final line in the body file and update the PR:
-  ```bash
-  gh pr edit "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$PR_BODY"
-  ```
+- **Model** — end the PR body with a short model slug identifying the model used, for example `Model: gpt-5.6-sol`.
 
 ### 5. Request Copilot review
 
@@ -184,7 +175,7 @@ cat /tmp/out.txt
 
 - Don't commit on top of a failing build, test, or lint run.
 - Don't open the PR as a draft.
-- Keep model information out of the PR title, branch, and git commit messages. The only allowed location is the single final Model information line in the PR body described in Step 4.
+- Keep model information out of the PR title, branch, and git commit messages. The only allowed location is the final model slug in the PR body described in Step 4.
 - Don't add validation or testing-steps sections to the PR description.
 - Don't claim CI passed without reading real `gh pr checks` output.
 - Don't auto-accept Copilot suggestions without validating them.
