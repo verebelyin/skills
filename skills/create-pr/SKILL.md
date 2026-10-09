@@ -6,7 +6,7 @@ argument-hint: 'Optional: target base branch, PR title, or scope hint'
 
 # Create a PR
 
-**Skill type: Goal skill.** The end-state is one concrete thing: a merged-ready, non-draft PR whose CI checks pass and whose Copilot review comments are all triaged (fixed or explicitly dismissed as false positives). This skill covers the *ship* half only — the code changes already exist. Do not implement new features here; if the change isn't written yet, implement it first.
+**Skill type: Goal skill.** The end-state is one concrete thing: a merged-ready, non-draft PR whose CI checks pass and, if the user opted into a Copilot review, whose Copilot review comments are all triaged (fixed or explicitly dismissed as false positives). This skill covers the *ship* half only — the code changes already exist. Do not implement new features here; if the change isn't written yet, implement it first.
 
 ## Procedure
 
@@ -56,7 +56,7 @@ EOF
 
 Then verify: `git log -1 --format=%B | sed -n l` — confirm no literal `\n` reached the message.
 
-**Never include** any reference to an AI assistant, LLM, model name, "generated with", or `Co-Authored-By` for a bot in the git commit message, branch name, PR title, or normal PR prose. The single permitted exception is the final model slug specified below.
+**Never include** any reference to an AI assistant, LLM, model name, "generated with", or `Co-Authored-By` for a bot in the git commit message, branch name, PR title, or normal PR prose. The single permitted exception is the final Model information line specified below.
 
 ### 4. Push and open the PR
 
@@ -74,11 +74,20 @@ gh pr create --base "$BASE" --title "$TITLE" --body-file "$PR_BODY"
   - **Background** — optional; include it only when an issue, ticket, or trigger adds useful context.
 - Before creating the PR, inspect the body file and confirm it contains no stale text or duplicated top-level sections.
 - **Do not add a validation/testing-steps section.**
-- **Model** — end the PR body with a short model slug identifying the model used, for example `Model: gpt-5.6-sol`.
+- **Model information** — make the final line of the PR body exactly one model-information line, after all sections.
 
-### 5. Request Copilot review
+### 5. Ask before requesting a Copilot review
 
-- Request Copilot through GitHub's documented reviewer API. The request body has no model or review-effort field:
+A Copilot code review uses the user's Copilot credits, so it is opt-in. **By default, add no reviewer.**
+
+- After the PR is open, ask the user whether they want a Copilot review on it. Use the runtime's question tool if one exists. Say in the question that each follow-up push re-requests a review, so one PR can use more than one review's worth of credits.
+- Ask on every PR. A yes on an earlier PR does not carry over.
+- Request the review only on an explicit yes. If the answer is no or unclear, or nobody can answer (non-interactive run), skip the rest of this step and the Copilot parts of Step 6.
+- Never add Copilot or any other reviewer through `gh pr create --reviewer`, `gh pr edit --add-reviewer`, or the API without that yes.
+
+If the user said yes:
+
+- Request Copilot through GitHub's documented reviewer API. The documented request body has only `reviewers` and `team_reviewers`:
   ```bash
   OWNER=org
   REPO=repo
@@ -92,14 +101,17 @@ gh pr create --base "$BASE" --title "$TITLE" --body-file "$PR_BODY"
   JSON
   cat /tmp/copilot-review-request.txt
   ```
-- The intended review effort for this skill is **Lite**. Configure the repository or organization default to `Lite` in GitHub Copilot code-review settings before running this workflow. The reviewer API cannot select `Lite`; never add undocumented `model`, `review_effort`, or prompt fields to the request.
-- Treat `Lite` as verified only when the Copilot overview comment for this review reports `Lite`. If the overview reports `Balanced`, or the effort cannot be verified, report the mismatch or uncertainty instead of claiming that this request used Lite.
+- The intended review effort for this skill is **Balanced**, which has been GitHub's default since 2026-09-28. No setting is needed unless an enterprise, organization, repository, or personal setting overrides it to Lite.
+- Effort resolution order: the effort chosen at request time (PR sidebar), then the effort already used on that PR, then the requester's personal setting, then repository, organization, and enterprise settings, then the built-in default (Balanced). Re-reviews therefore keep the effort of the first review.
+- The 2026-10-02 GitHub changelog says the REST and GraphQL APIs can set effort per request. As of 2026-10-05 the field is not in the REST docs for `requested_reviewers` or in the GraphQL `RequestReviewsInput`, `RequestReviewsByLoginInput`, or `RerequestReviewsInput` schemas. Do not guess a field name. Re-check those docs and add the field here once it is published.
+- `gh pr create/edit --reviewer @copilot` has no effort flag either.
+- Treat `Balanced` as verified only when the Copilot overview comment for this review reports it. If the overview reports a different level, or the effort cannot be verified, report the mismatch or uncertainty.
 - Confirm Copilot code review is enabled for the account or organization and that the token can write pull-request reviews. Copilot normally submits a `COMMENT` review, not an approval.
 - If the API returns `403` or `422`, stop the review path and report the permission, policy, or collaborator failure. Do not substitute an undocumented reviewer identity.
 
 ### 6. Babysit the PR
 
-Loop until both CI and review are clean. A requested reviewer that has not submitted a review is still pending. Use bounded polls while CI runs; use the agent/runtime's wait facility between polls instead of a busy loop or an unbounded shell wait. Stop after a reasonable timeout, such as 15 minutes, and report the review as pending rather than claiming success.
+Loop until CI is clean and, if the user opted into a Copilot review, the review is clean too. Without a Copilot review, skip the Copilot polling and triage below. A requested reviewer that has not submitted a review is still pending. Use bounded polls while CI runs; use the agent/runtime's wait facility between polls instead of a busy loop or an unbounded shell wait. Stop after a reasonable timeout, such as 15 minutes, and report the review as pending rather than claiming success.
 
 **CI checks:**
 ```bash
@@ -108,7 +120,7 @@ cat /tmp/checks.txt
 ```
 For any failing check, read the log (`gh run view "$RUN_ID" --repo "$OWNER/$REPO" --log-failed > /tmp/log.txt 2>&1 < /dev/null`), fix the real cause, and push a follow-up commit. Never re-run a job hoping it goes green without understanding why it was red.
 
-**Copilot review state and comments:**
+**Copilot review state and comments** (only when the user said yes in Step 5):
 ```bash
 # The reviewer remains here until it submits a review.
 gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
@@ -157,11 +169,13 @@ gh api graphql \
 
 After each follow-up push, request Copilot again with the same API call, then repeat the bounded state, review, overview, and inline-comment polls. A review for an older commit does not cover the new head.
 
-Completion criterion: required CI checks pass; a Copilot review is submitted for the current head; the overview confirms `Lite` or the final report explicitly says that effort was not verified; and every Copilot comment is fixed, dismissed as a false positive, or explicitly deferred with a reason.
+Completion criterion without a Copilot review: required CI checks pass.
+
+Completion criterion with a Copilot review: required CI checks pass; a Copilot review is submitted for the current head; the overview confirms `Balanced` or the final report explicitly says that effort was not verified; and every Copilot comment is fixed, dismissed as a false positive, or explicitly deferred with a reason.
 
 ### 7. Report
 
-Give the user: PR link and number, branch name, commit subjects, validation results (including anything that couldn't run), final CI status from actual `gh pr checks` output, and how each Copilot comment was resolved (fixed / dismissed as false positive / deferred with reason).
+Give the user: PR link and number, branch name, commit subjects, validation results (including anything that couldn't run), final CI status from actual `gh pr checks` output, and whether a Copilot review was requested or declined. If one was requested, also say how each Copilot comment was resolved (fixed / dismissed as false positive / deferred with reason).
 
 ## Sandbox gotchas
 
@@ -175,9 +189,10 @@ cat /tmp/out.txt
 
 - Don't commit on top of a failing build, test, or lint run.
 - Don't open the PR as a draft.
-- Keep model information out of the PR title, branch, and git commit messages. The only allowed location is the final model slug in the PR body described in Step 4.
+- Keep model information out of the PR title, branch, and git commit messages. The only allowed location is the single final Model information line in the PR body described in Step 4.
 - Don't add validation or testing-steps sections to the PR description.
 - Don't claim CI passed without reading real `gh pr checks` output.
+- Don't request a Copilot review, or any other reviewer, without the user's explicit yes for this PR.
 - Don't auto-accept Copilot suggestions without validating them.
 - Don't force-push, rewrite history, or amend pushed commits without explicit user confirmation.
 - Don't expand scope: follow-up commits fix review findings on this change, not adjacent code.
